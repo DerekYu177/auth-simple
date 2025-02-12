@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require 'httparty'
-
 require 'rails/all'
 require 'action_controller/railtie'
 
