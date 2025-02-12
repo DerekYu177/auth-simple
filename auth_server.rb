@@ -20,10 +20,12 @@ Rails.application.routes.default_url_options = { host: 'localhost' }
 Rails.application.routes.draw do
   get 'oauth/authorize' => 'oauth/authorization#new'
   post 'oauth/tokens' => 'oauth/tokens#create'
-  get 'admin' => 'resource_server/admin#new'
+  get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
 end
 
+# we don't have a database, clearly.
+# but these are necessary configuration
 database = 'development.sqlite3'
 ENV['DATABASE_URL'] = "sqlite3:#{database}"
 ActiveRecord::Base.establish_connection(adapter: 'sqlite3', database: database)
@@ -85,11 +87,45 @@ module OAuth
     end
   end
 
-  require_relative './oauth/tokens_controller'
+  class TokensController < ActionController::Base
+    skip_before_action :verify_authenticity_token
+
+    def create
+      case token_params[:grant_type]
+      when 'authorization_code'
+        # heh.
+        if token_params[:code] == 'valid-grant'
+          render(
+            json: {
+              access_token: 'valid-access-token',
+              token_type: 'access-token',
+              expires_in: 1.hour.to_i,
+              refresh_token: nil
+            }.compact
+          )
+        else
+          oauth_error!('invalid code')
+        end
+        # something here?
+      else
+        oauth_error!("#{token_params[:grant_type]} unrecognized", message: 'unsupported_grant_type')
+      end
+    end
+
+    private
+
+    def token_params
+      params.permit(:grant_type, :client_id, :code)
+    end
+
+    def oauth_error!(error_description, message: 'invalid_request')
+      redirect_to(admin_path(error: message, error_description:, **token_params))
+    end
+  end
 end
 
 module ResourceServer
-  class AdminController < ActionController::Base
+  class AuthenticatedController < ActionController::Base
     before_action :require_authentication, only: :new
 
     def new
@@ -101,16 +137,17 @@ module ResourceServer
     private
 
     def require_authentication
-      # what goes here?
-      require_relative './oauth/authentication'
+      return if current_user.present?
 
-      url = OAuth::Authenticate.start!(
-        request: request,
-        redirect_to: admin_path,
-        current_user: current_user
+      redirect_to oauth_authorize_path(
+        client_id: 1,
+        code_challenge: 'random',
+        code_challenge_method: 'S256',
+        authenticated: 1,
+        response_type: 'code',
+        redirect_to: '', # ?
+        state: PseudoState.new.to_s
       )
-
-      redirect_to(url) if url
     end
 
     def current_user
