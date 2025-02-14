@@ -15,8 +15,9 @@ end
 Rails.application.initialize!
 Rails.application.routes.default_url_options = { host: 'localhost' }
 Rails.application.routes.draw do
-  get 'oauth/authorize' => 'oauth/authorization#new'
-  post 'oauth/tokens' => 'oauth/tokens#create'
+  get 'oauth/authorize' => 'authorization_server/oauth/authorization#new'
+  post 'oauth/tokens' => 'authorization_server/oauth/tokens#create'
+
   get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
 end
@@ -37,86 +38,88 @@ PseudoState = Struct.new do
   def to_s = state
 end
 
-module OAuth
-  class AuthorizationController < ActionController::Base
-    include Rails.application.routes.url_helpers
+module AuthorizationServer
+  module OAuth
+    class AuthorizationController < ActionController::Base
+      include Rails.application.routes.url_helpers
 
-    def new
-      # requires authentication here
-      # returns authorization grant
-      return oauth_error!('invalid response_type') unless authorization_params[:response_type] == 'code'
-      return oauth_error!('unauthorized_client') unless authorization_params[:client_id]
-      return oauth_error!('missing code_challenge') unless authorization_params[:code_challenge]
+      def new
+        # requires authentication here
+        # returns authorization grant
+        return oauth_error!('invalid response_type') unless authorization_params[:response_type] == 'code'
+        return oauth_error!('unauthorized_client') unless authorization_params[:client_id]
+        return oauth_error!('missing code_challenge') unless authorization_params[:code_challenge]
 
-      unless authorization_params[:code_challenge_method] == 'S256'
-        return oauth_error!(
-          'invalid code_challenge_method'
-        )
-      end
-      return oauth_error!('invalid authentication') unless params[:authenticated] == '1'
-
-      case authorization_params[:client_id]
-      when '1'
-        redirect_to admin_callback_path(code: 'valid-grant', state: authorization_params[:state])
-      else
-        oauth_error!('unrecognized client')
-      end
-    end
-
-    private
-
-    PERMITTED_PARAMS = %i[
-      response_type
-      client_id
-      code_challenge
-      code_challenge_method
-      authenticated
-      redirect_to
-      state
-    ].freeze
-
-    def authorization_params
-      params.permit(*PERMITTED_PARAMS)
-    end
-
-    def oauth_error!(error_description, message: 'invalid_request')
-      redirect_to(admin_path(error: message, error_description:, **authorization_params.except(:authenticated)))
-    end
-  end
-
-  class TokensController < ActionController::Base
-    skip_before_action :verify_authenticity_token
-
-    def create
-      case token_params[:grant_type]
-      when 'authorization_code'
-        # heh.
-        if token_params[:code] == 'valid-grant'
-          render(
-            json: {
-              access_token: 'valid-access-token',
-              token_type: 'access-token',
-              expires_in: 1.hour.to_i,
-              refresh_token: nil
-            }.compact
+        unless authorization_params[:code_challenge_method] == 'S256'
+          return oauth_error!(
+            'invalid code_challenge_method'
           )
-        else
-          oauth_error!('invalid code')
         end
-        # something here?
-      else
-        oauth_error!("#{token_params[:grant_type]} unrecognized", message: 'unsupported_grant_type')
+        return oauth_error!('invalid authentication') unless params[:authenticated] == '1'
+
+        case authorization_params[:client_id]
+        when '1'
+          redirect_to admin_callback_path(code: 'valid-grant', state: authorization_params[:state])
+        else
+          oauth_error!('unrecognized client')
+        end
+      end
+
+      private
+
+      PERMITTED_PARAMS = %i[
+        response_type
+        client_id
+        code_challenge
+        code_challenge_method
+        authenticated
+        redirect_to
+        state
+      ].freeze
+
+      def authorization_params
+        params.permit(*PERMITTED_PARAMS)
+      end
+
+      def oauth_error!(error_description, message: 'invalid_request')
+        redirect_to(admin_path(error: message, error_description:, **authorization_params.except(:authenticated)))
       end
     end
 
-    private
+    class TokensController < ActionController::Base
+      skip_before_action :verify_authenticity_token
 
-    def token_params
-      params.permit(:grant_type, :client_id, :code)
-    end
+      def create
+        case token_params[:grant_type]
+        when 'authorization_code'
+          # heh.
+          if token_params[:code] == 'valid-grant'
+            render(
+              json: {
+                access_token: 'valid-access-token',
+                token_type: 'access-token',
+                expires_in: 1.hour.to_i,
+                refresh_token: nil
+              }.compact
+            )
+          else
+            oauth_error!('invalid code')
+          end
+          # something here?
+        else
+          oauth_error!("#{token_params[:grant_type]} unrecognized", message: 'unsupported_grant_type')
+        end
+      end
 
-    def oauth_error!(error_description, message: 'invalid_request')
-      redirect_to(admin_path(error: message, error_description:, **token_params))
+      private
+
+      def token_params
+        params.permit(:grant_type, :client_id, :code)
+      end
+
+      def oauth_error!(error_description, message: 'invalid_request')
+        redirect_to(admin_path(error: message, error_description:, **token_params))
+      end
     end
   end
 end
