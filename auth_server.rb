@@ -8,7 +8,6 @@ class AuthServer < Rails::Application
   config.root = '__dir__'
   config.secret_key_base = 'secret'
   config.action_controller.default_url_options = { host: 'localhost' }
-  config.action_controller.default_url_options = { host: 'localhost' }
   config.eager_load = false
   config.logger = Logger.new($stdout)
 end
