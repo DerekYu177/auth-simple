@@ -34,7 +34,7 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_authorize_returns_success
     get(
       '/oauth/authorize',
-      client_id: ResourceServer::CLIENT_ID,
+      client_id: State::ResourceServer::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 1,
@@ -52,7 +52,7 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_authorize_error_redirects
     get(
       '/oauth/authorize',
-      client_id: ResourceServer::CLIENT_ID,
+      client_id: State::ResourceServer::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 2,
@@ -65,12 +65,22 @@ class AuthServerTest < ActiveSupport::TestCase
   end
 
   def test_tokens_returns_access_token
-    # assume we have the token here
+    # pre-populate the "database"
+
+    code_verifier = State::ResourceServer.instance.code_verifier
+
+    State::AuthorizationServer.instance.store!(
+      code_challenge_method: 'S256',
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA2.hexdigest(code_verifier)),
+      code: State::AuthorizationServer::GRANT
+    )
+
     post(
       '/oauth/tokens',
       grant_type: 'authorization_code',
+      code_verifier: code_verifier,
       code: 'valid-grant',
-      client_id: ResourceServer::CLIENT_ID
+      client_id: State::ResourceServer::ID
     )
 
     response = JSON.parse(last_response.body)

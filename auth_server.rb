@@ -38,9 +38,52 @@ PseudoState = Struct.new do
   def to_s = state
 end
 
-module ResourceServer
-  CLIENT_ID = '1'
+# a stand-in for db state
+module State
+  class ResourceServer
+    include Singleton
 
+    ID = '1'
+
+    def code_verifier = 'VERIFIER'
+  end
+
+  # data shared between resource server & authorization server
+  class ClientRegistration
+    include Singleton
+
+    def id = ResourceServer::ID
+    def callback_url(...) = url_helpers.admin_callback_path(...)
+
+    private
+
+    def url_helpers
+      Rails.application.routes.url_helpers
+    end
+  end
+
+  class AuthorizationServer
+    include Singleton
+
+    GRANT = 'valid-grant'
+
+    attr_reader :storage
+
+    def initialize
+      @storage = {}
+    end
+
+    def fetch(code)
+      @storage[code]
+    end
+
+    def store!(code_challenge:, code_challenge_method:, code:)
+      @storage[code] = { code_challenge:, code_challenge_method: }
+    end
+  end
+end
+
+module ResourceServer
   # OAuth 2.1 Section 1.2 Protocol Flow (1)
   # The client requests authorization from the resource owner.
   # The authorization request can be made directly to the resource owner,
@@ -59,9 +102,15 @@ module ResourceServer
     def require_authentication
       return if current_user.present?
 
+      code_challenge = Base64.urlsafe_encode64(
+        Digest::SHA2.hexdigest(
+          State::ResourceServer.instance.code_verifier
+        )
+      )
+
       redirect_to oauth_authorize_path(
-        client_id: CLIENT_ID,
-        code_challenge: 'random',
+        client_id: State::ResourceServer::ID,
+        code_challenge:,
         code_challenge_method: 'S256',
         authenticated: 1,
         response_type: 'code',
@@ -95,8 +144,9 @@ module ResourceServer
       response = post_oauth_tokens!(
         body: {
           'grant_type' => 'authorization_code',
+          'code_verifier' => State::ResourceServer.instance.code_verifier,
           'code' => callback_params[:code],
-          'client_id' => CLIENT_ID
+          'client_id' => State::ResourceServer::ID
         }
       )
       tokens = JSON.parse(response.body)
@@ -137,29 +187,43 @@ module AuthorizationServer
     class AuthorizationController < ActionController::Base
       include Rails.application.routes.url_helpers
 
+      before_action :validate_request!, only: :new
+
       def new
         # requires authentication here
         # returns authorization grant
-        return oauth_error!('invalid response_type') unless authorization_params[:response_type] == 'code'
-        return oauth_error!('unauthorized_client') unless authorization_params[:client_id]
-        return oauth_error!('missing code_challenge') unless authorization_params[:code_challenge]
 
-        unless authorization_params[:code_challenge_method] == 'S256'
-          return oauth_error!(
-            'invalid code_challenge_method'
-          )
-        end
-        return oauth_error!('invalid authentication') unless params[:authenticated] == '1'
+        # we MUST associate the code_challenge
+        # and code_challenge_method with the issued authorization_code
+        # we'll store the trifecta (cc, ccm, code)
+        # in our shared state object
+        code = State::AuthorizationServer::GRANT
+
+        State::AuthorizationServer.instance.store!(
+          code_challenge: authorization_params[:code_challenge],
+          code: code,
+          code_challenge_method: authorization_params[:code_challenge_method]
+        )
 
         case authorization_params[:client_id]
-        when ResourceServer::CLIENT_ID
-          redirect_to admin_callback_path(code: 'valid-grant', state: authorization_params[:state])
+        when State::ClientRegistration.instance.id
+          redirect_to admin_callback_path(code:, state: authorization_params[:state])
         else
           oauth_error!('unrecognized client')
         end
       end
 
       private
+
+      def validate_request!
+        return oauth_error!('response_type') unless authorization_params[:response_type] == 'code'
+        return oauth_error!('client_id') unless authorization_params[:client_id]
+        return oauth_error!('code_challenge') unless authorization_params[:code_challenge]
+        return oauth_error!('code_challenge_method') unless authorization_params[:code_challenge_method] == 'S256'
+        return oauth_error!('invalid authentication') unless params[:authenticated] == '1'
+
+        nil
+      end
 
       PERMITTED_PARAMS = %i[
         response_type
@@ -190,7 +254,7 @@ module AuthorizationServer
         case token_params[:grant_type]
         when 'authorization_code'
           # heh.
-          if token_params[:code] == 'valid-grant' && token_params[:client_id] == ResourceServer::CLIENT_ID
+          if valid_grant? && valid_client? && valid_code_verifier?
             render(
               json: {
                 access_token: 'valid-access-token',
@@ -210,9 +274,34 @@ module AuthorizationServer
 
       private
 
-      def token_params
-        params.permit(:grant_type, :client_id, :code)
+      def valid_grant?
+        # there's no super easy way to validate other than by introspecting it
+        State::AuthorizationServer.instance.storage.key?(token_params[:code])
       end
+
+      def valid_client?
+        token_params[:client_id] == State::ClientRegistration.instance.id
+      end
+
+      def valid_code_verifier?
+        challenge = State::AuthorizationServer.instance.storage.fetch(token_params[:code])
+
+        return false unless challenge[:code_challenge_method] == 'S256'
+        return false unless token_params[:code_verifier]
+
+        challenge[:code_challenge] == Base64.urlsafe_encode64(Digest::SHA2.hexdigest(token_params[:code_verifier]))
+      end
+
+      def token_params
+        params.permit(*PERMITTED_PARAMS)
+      end
+
+      PERMITTED_PARAMS = %i[
+        grant_type
+        client_id
+        code
+        code_verifier
+      ].freeze
 
       def oauth_error!(error_description, message: 'invalid_request')
         redirect_to(admin_path(error: message, error_description:, **token_params))
