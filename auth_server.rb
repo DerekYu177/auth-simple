@@ -46,6 +46,19 @@ module State
     ID = '1'
 
     def code_verifier = 'VERIFIER'
+    attr_reader :storage
+
+    def initialize
+      @storage = {}
+    end
+
+    def current_access_token
+      @storage[:access_token]
+    end
+
+    def current_access_token=(token)
+      @storage[:access_token] = token
+    end
   end
 
   # data shared between resource server & authorization server
@@ -120,7 +133,7 @@ module ResourceServer
     end
 
     def current_user
-      ResourceServer::CallbackController.access_token
+      State::ResourceServer.instance.current_access_token
     end
   end
 
@@ -133,8 +146,6 @@ module ResourceServer
   # client to request authorization and the types
   # supported by the authorization server.
   class CallbackController < ActionController::Base
-    mattr_accessor :access_token
-
     def new
       raise 'expected grant, did not receive' unless callback_params[:code]
 
@@ -151,9 +162,7 @@ module ResourceServer
       )
       tokens = JSON.parse(response.body)
 
-      # well, we don't have a storage mechanism
-      # so I'll have to store it as a class variable. Haha.
-      self.class.access_token = tokens['access_token']
+      State::ResourceServer.instance.current_access_token = tokens['access_token']
 
       redirect_to(admin_path)
     end
