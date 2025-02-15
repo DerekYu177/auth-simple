@@ -15,6 +15,8 @@ end
 
 require 'minitest/test_task'
 
+# to run a specific test:
+# N=/regexoftest/ rake test
 Minitest::TestTask.create(:test) do |t|
   t.warning = false
   t.test_globs = ['**/*_test.rb']
