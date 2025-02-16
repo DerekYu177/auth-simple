@@ -10,6 +10,9 @@ class AuthServer < Rails::Application
   config.action_controller.default_url_options = { host: 'localhost' }
   config.eager_load = false
   config.logger = Logger.new($stdout)
+
+  # application configurations
+  config.access_token_validation_type = 'reference' # can be either 'reference' or 'self-encoded'
 end
 
 Rails.application.initialize!
@@ -17,6 +20,10 @@ Rails.application.routes.default_url_options = { host: 'localhost' }
 Rails.application.routes.draw do
   get 'oauth/authorize' => 'authorization_server/oauth/authorization#new'
   post 'oauth/tokens' => 'authorization_server/oauth/tokens#create'
+
+  if Rails.application.config.access_token_validation_type == 'reference'
+    post 'oauth/introspect' => 'authorization_server/oauth/introspection#create'
+  end
 
   get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
@@ -36,6 +43,27 @@ end
 PseudoState = Struct.new do
   def state = 'pseudo-state'
   def to_s = state
+end
+
+class API
+  class << self
+    def post(path, body:)
+      # looks like API requests are _not_ easily supported
+      # as it conflicts with internal Shopify tool
+
+      requestenv = {
+        'REQUEST_METHOD' => 'POST',
+        'PATH_INFO' => path,
+        'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
+        'HTTP_HOST' => 'localhost',
+        'action_dispatch.request.request_parameters' => body
+      }
+
+      _, _, response = Rails.application.call(requestenv)
+
+      response
+    end
+  end
 end
 
 # a stand-in for db state
@@ -59,6 +87,14 @@ module State
     def current_access_token=(token)
       @storage[:access_token] = token
     end
+
+    def current_user
+      @storage[:user]
+    end
+
+    def current_user=(user)
+      @storage[:user] = user
+    end
   end
 
   # data shared between resource server & authorization server
@@ -79,6 +115,7 @@ module State
     include Singleton
 
     GRANT = 'valid-grant'
+    TOKEN = 'valid-access-token'
 
     attr_reader :storage
 
@@ -152,7 +189,8 @@ module ResourceServer
       # OAuth 2.1 Section 1.2 Protocol Flow (3)
       # The client requests an access token by authenticating
       # with the authorization server and presenting the authorization grant.
-      response = post_oauth_tokens!(
+      response = API.post(
+        '/oauth/tokens',
         body: {
           'grant_type' => 'authorization_code',
           'code_verifier' => State::ResourceServer.instance.code_verifier,
@@ -162,28 +200,15 @@ module ResourceServer
       )
       tokens = JSON.parse(response.body)
 
-      State::ResourceServer.instance.current_access_token = tokens['access_token']
+      access_token = tokens['access_token']
+
+      State::ResourceServer.instance.current_access_token = access_token
+      State::ResourceServer.instance.current_user = OAuth::AccessToken.introspect(access_token)
 
       redirect_to(admin_path)
     end
 
     private
-
-    def post_oauth_tokens!(body:)
-      # looks like API requests are _not_ easily supported
-      # as it conflicts with internal Shopify tool
-
-      postenv = {
-        'REQUEST_METHOD' => 'POST',
-        'PATH_INFO' => '/oauth/tokens',
-        'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
-        'HTTP_HOST' => 'localhost',
-        'action_dispatch.request.request_parameters' => body
-      }
-
-      _, _, response = Rails.application.call(postenv)
-      response
-    end
 
     def callback_params
       params.permit(:code, :state)
@@ -266,7 +291,7 @@ module AuthorizationServer
           if valid_grant? && valid_client? && valid_code_verifier?
             render(
               json: {
-                access_token: 'valid-access-token',
+                access_token: State::AuthorizationServer::TOKEN,
                 token_type: 'access-token',
                 expires_in: 1.hour.to_i,
                 refresh_token: nil
@@ -317,4 +342,13 @@ module AuthorizationServer
       end
     end
   end
+end
+
+case Rails.application.config.access_token_validation_type
+when 'reference'
+  require 'oauth/token_introspection'
+when 'self-encoded'
+  require 'oauth/jwt'
+else
+  raise "unrecognized access token validation type: #{Rails.application.config.access_token_validation_type}"
 end

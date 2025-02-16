@@ -103,6 +103,32 @@ class AuthServerTest < ActiveSupport::TestCase
     assert_equal 'unsupported_grant_type', query['error']
   end
 
+  def test_introspection_returns_active
+    post(
+      '/oauth/introspect',
+      token: State::AuthorizationServer::TOKEN
+    )
+
+    response = JSON.parse(last_response.body)
+
+    assert_includes response, 'active'
+    assert response['active']
+
+    assert_equal 'DerekYu177', response['username']
+  end
+
+  def test_introspection_returns_false
+    post(
+      '/oauth/introspect',
+      token: 'invalid'
+    )
+
+    response = JSON.parse(last_response.body)
+
+    assert_includes response, 'active'
+    refute response['active']
+  end
+
   def default_host
     'localhost'
   end
