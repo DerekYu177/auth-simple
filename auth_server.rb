@@ -68,32 +68,44 @@ end
 
 # a stand-in for db state
 module State
+  module Storable
+    include ActiveSupport::Concern
+
+    def method_missing(method, *args, **kwargs)
+      attribute = method.to_s.delete_suffix('=').to_sym
+
+      return super unless respond_to_missing?(attribute)
+
+      if method.to_s.ends_with?('=')
+        @storage.send(:[]=, attribute, *args, **kwargs)
+      else
+        @storage.send(:[], attribute, *args, **kwargs)
+      end
+    end
+
+    def respond_to_missing?(method)
+      storable_attributes.include?(method)
+    end
+  end
+
   class ResourceServer
     include Singleton
+    include Storable
 
     ID = '1'
 
-    def code_verifier = 'VERIFIER'
-    attr_reader :storage
+    def client_id = ID
 
     def initialize
       @storage = {}
     end
 
-    def current_access_token
-      @storage[:access_token]
-    end
-
-    def current_access_token=(token)
-      @storage[:access_token] = token
-    end
-
-    def current_user
-      @storage[:user]
-    end
-
-    def current_user=(user)
-      @storage[:user] = user
+    def storable_attributes
+      %i[
+        current_access_token
+        current_user
+        code_verifier
+      ]
     end
   end
 
@@ -113,22 +125,17 @@ module State
 
   class AuthorizationServer
     include Singleton
-
-    GRANT = 'valid-grant'
-    TOKEN = 'valid-access-token'
-
-    attr_reader :storage
+    include Storable
 
     def initialize
       @storage = {}
     end
 
-    def fetch(code)
-      @storage[code]
-    end
-
-    def store!(code_challenge:, code_challenge_method:, code:)
-      @storage[code] = { code_challenge:, code_challenge_method: }
+    def storable_attributes
+      %i[
+        authorization_code_grants
+        access_tokens
+      ]
     end
   end
 end
@@ -152,14 +159,15 @@ module ResourceServer
     def require_authentication
       return if current_user.present?
 
+      cache.code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
       code_challenge = Base64.urlsafe_encode64(
         Digest::SHA2.hexdigest(
-          State::ResourceServer.instance.code_verifier
+          cache.code_verifier
         )
       )
 
       redirect_to oauth_authorize_path(
-        client_id: State::ResourceServer::ID,
+        client_id: cache.client_id,
         code_challenge:,
         code_challenge_method: 'S256',
         authenticated: 1,
@@ -170,7 +178,11 @@ module ResourceServer
     end
 
     def current_user
-      State::ResourceServer.instance.current_access_token
+      cache.current_access_token
+    end
+
+    def cache
+      @cache ||= State::ResourceServer.instance
     end
   end
 
@@ -193,22 +205,27 @@ module ResourceServer
         '/oauth/tokens',
         body: {
           'grant_type' => 'authorization_code',
-          'code_verifier' => State::ResourceServer.instance.code_verifier,
+          'code_verifier' => cache.code_verifier,
           'code' => callback_params[:code],
-          'client_id' => State::ResourceServer::ID
+          'client_id' => cache.client_id
         }
       )
       tokens = JSON.parse(response.body)
 
       access_token = tokens['access_token']
 
-      State::ResourceServer.instance.current_access_token = access_token
-      State::ResourceServer.instance.current_user = OAuth::AccessToken.introspect(access_token)
+      cache.current_access_token = access_token
+      introspect = OAuth::AccessToken.introspect(access_token)
+      cache.current_user = introspect['username']
 
       redirect_to(admin_path)
     end
 
     private
+
+    def cache
+      @cache ||= State::ResourceServer.instance
+    end
 
     def callback_params
       params.permit(:code, :state)
@@ -231,23 +248,28 @@ module AuthorizationServer
         # and code_challenge_method with the issued authorization_code
         # we'll store the trifecta (cc, ccm, code)
         # in our shared state object
-        code = State::AuthorizationServer::GRANT
+        code = "authorization-code-grant:#{SecureRandom.hex(10)}"
 
-        State::AuthorizationServer.instance.store!(
+        cache.authorization_code_grants ||= {}
+        cache.authorization_code_grants[code] = {
           code_challenge: authorization_params[:code_challenge],
-          code: code,
           code_challenge_method: authorization_params[:code_challenge_method]
-        )
+        }
 
+        client_registration = State::ClientRegistration.instance
         case authorization_params[:client_id]
-        when State::ClientRegistration.instance.id
-          redirect_to admin_callback_path(code:, state: authorization_params[:state])
+        when client_registration.id
+          redirect_to client_registration.callback_url(code:, state: authorization_params[:state])
         else
           oauth_error!('unrecognized client')
         end
       end
 
       private
+
+      def cache
+        @cache ||= State::AuthorizationServer.instance
+      end
 
       def validate_request!
         return oauth_error!('response_type') unless authorization_params[:response_type] == 'code'
@@ -287,11 +309,15 @@ module AuthorizationServer
       def create
         case token_params[:grant_type]
         when 'authorization_code'
-          # heh.
           if valid_grant? && valid_client? && valid_code_verifier?
+
+            access_token = "access-token:#{SecureRandom.hex(10)}"
+            cache.access_tokens ||= {}
+            cache.access_tokens[access_token] = nil
+
             render(
               json: {
-                access_token: State::AuthorizationServer::TOKEN,
+                access_token:,
                 token_type: 'access-token',
                 expires_in: 1.hour.to_i,
                 refresh_token: nil
@@ -310,7 +336,7 @@ module AuthorizationServer
 
       def valid_grant?
         # there's no super easy way to validate other than by introspecting it
-        State::AuthorizationServer.instance.storage.key?(token_params[:code])
+        cache.authorization_code_grants[token_params[:code]].present?
       end
 
       def valid_client?
@@ -318,12 +344,16 @@ module AuthorizationServer
       end
 
       def valid_code_verifier?
-        challenge = State::AuthorizationServer.instance.storage.fetch(token_params[:code])
+        challenge = cache.authorization_code_grants[token_params[:code]]
 
         return false unless challenge[:code_challenge_method] == 'S256'
         return false unless token_params[:code_verifier]
 
         challenge[:code_challenge] == Base64.urlsafe_encode64(Digest::SHA2.hexdigest(token_params[:code_verifier]))
+      end
+
+      def cache
+        @cache ||= State::AuthorizationServer.instance
       end
 
       def token_params

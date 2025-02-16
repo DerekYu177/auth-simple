@@ -12,6 +12,9 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_full_unauthorized_flow
     get('/admin')
 
+    database = State::ResourceServer.instance
+    refute database.current_user
+
     assert_equal '/oauth/authorize', URI(last_response['location']).path
     assert_predicate last_response, :redirect?
 
@@ -29,6 +32,11 @@ class AuthServerTest < ActiveSupport::TestCase
 
     response = JSON.parse(last_response.body)
     assert_equal 'authenticated', response['result']
+
+    assert_predicate database.current_access_token, :present?
+    assert_predicate database.current_user, :present?
+
+    assert_equal 'DerekYu177', database.current_user
   end
 
   def test_authorize_returns_success
@@ -43,7 +51,7 @@ class AuthServerTest < ActiveSupport::TestCase
     query = parse_redirect(last_response)
 
     assert_includes query, 'code'
-    assert_equal 'valid-grant', query['code']
+    assert_includes query['code'], 'authorization-code-grant'
 
     uri = URI(last_response['location'])
     assert_equal '/admin/callback', uri.path
@@ -67,19 +75,21 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_tokens_returns_access_token
     # pre-populate the "database"
 
-    code_verifier = State::ResourceServer.instance.code_verifier
+    code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
+    grant = 'authorization-code-grant'
 
-    State::AuthorizationServer.instance.store!(
+    cache = State::AuthorizationServer.instance
+    cache.authorization_code_grants = {}
+    cache.authorization_code_grants[grant] = {
       code_challenge_method: 'S256',
-      code_challenge: Base64.urlsafe_encode64(Digest::SHA2.hexdigest(code_verifier)),
-      code: State::AuthorizationServer::GRANT
-    )
+      code_challenge: Base64.urlsafe_encode64(Digest::SHA2.hexdigest(code_verifier))
+    }
 
     post(
       '/oauth/tokens',
       grant_type: 'authorization_code',
       code_verifier: code_verifier,
-      code: 'valid-grant',
+      code: grant,
       client_id: State::ResourceServer::ID
     )
 
@@ -104,9 +114,15 @@ class AuthServerTest < ActiveSupport::TestCase
   end
 
   def test_introspection_returns_active
+    access_token = 'access-token'
+
+    cache = State::AuthorizationServer.instance
+    cache.access_tokens ||= {}
+    cache.access_tokens[access_token] = nil
+
     post(
       '/oauth/introspect',
-      token: State::AuthorizationServer::TOKEN
+      token: access_token
     )
 
     response = JSON.parse(last_response.body)

@@ -25,7 +25,7 @@ module AuthorizationServer
       skip_before_action :verify_authenticity_token
 
       def create
-        return render(json: { active: false }) unless introspection_params[:token] == State::AuthorizationServer::TOKEN
+        return render(json: { active: false }) unless valid_token?
 
         render(
           json: {
@@ -42,6 +42,14 @@ module AuthorizationServer
       end
 
       private
+
+      def valid_token?
+        cache.access_tokens.key?(introspection_params[:token])
+      end
+
+      def cache
+        @cache ||= State::AuthorizationServer.instance
+      end
 
       def introspection_params
         params.permit(:token)
