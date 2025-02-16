@@ -5,6 +5,16 @@ require 'rails/all'
 module OAuth
   class AccessToken
     class << self
+      def build(user_attributes)
+        access_token = "access-token:#{SecureRandom.hex(10)}"
+
+        cache = State::AuthorizationServer.instance
+        cache.access_tokens ||= {}
+        cache.access_tokens[access_token] = user_attributes
+
+        access_token
+      end
+
       def introspect(access_token)
         # make a call to the introspection endpoint
         response = API.post(
@@ -30,13 +40,7 @@ module AuthorizationServer
         render(
           json: {
             active: true,
-            # scope
-            client_id: State::ClientRegistration.instance.id,
-            # exp,
-            # iat,
-            # sub,
-            # iss
-            username: 'DerekYu177'
+            **cache.access_tokens[introspection_params[:token]]
           }
         )
       end
@@ -44,6 +48,7 @@ module AuthorizationServer
       private
 
       def valid_token?
+        cache.access_tokens ||= {}
         cache.access_tokens.key?(introspection_params[:token])
       end
 

@@ -99,6 +99,61 @@ class AuthServerTest < ActiveSupport::TestCase
     assert_includes response, 'token_type'
   end
 
+  def test_tokens_by_reference
+    Rails.application.config.with(access_token_validation_type: 'reference') do
+      code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
+      grant = 'authorization-code-grant'
+
+      cache = State::AuthorizationServer.instance
+      cache.authorization_code_grants = {}
+      cache.authorization_code_grants[grant] = {
+        code_challenge_method: 'S256',
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA2.hexdigest(code_verifier))
+      }
+
+      post(
+        '/oauth/tokens',
+        grant_type: 'authorization_code',
+        code_verifier: code_verifier,
+        code: grant,
+        client_id: State::ResourceServer::ID
+      )
+
+      response = JSON.parse(last_response.body)
+
+      assert_includes response['access_token'], 'access-token:'
+    end
+  end
+
+  def test_tokens_by_self_encoded
+    Rails.application.config.with(access_token_validation_type: 'self-encoded') do
+      code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
+      grant = 'authorization-code-grant'
+
+      cache = State::AuthorizationServer.instance
+      cache.authorization_code_grants = {}
+      cache.authorization_code_grants[grant] = {
+        code_challenge_method: 'S256',
+        code_challenge: Base64.urlsafe_encode64(Digest::SHA2.hexdigest(code_verifier))
+      }
+
+      post(
+        '/oauth/tokens',
+        grant_type: 'authorization_code',
+        code_verifier: code_verifier,
+        code: grant,
+        client_id: State::ResourceServer::ID
+      )
+
+      response = JSON.parse(last_response.body)
+
+      payload = OAuth::JWT.introspect(response['access_token'])
+
+      assert_equal 'DerekYu177', payload['username']
+      assert_equal State::ResourceServer::ID, payload['client_id']
+    end
+  end
+
   def test_tokens_error_if_unrecognized
     post(
       '/oauth/tokens',
@@ -114,35 +169,39 @@ class AuthServerTest < ActiveSupport::TestCase
   end
 
   def test_introspection_returns_active
-    access_token = 'access-token'
+    Rails.application.config.with(access_token_validation_type: 'reference') do
+      access_token = 'access-token'
 
-    cache = State::AuthorizationServer.instance
-    cache.access_tokens ||= {}
-    cache.access_tokens[access_token] = nil
+      cache = State::AuthorizationServer.instance
+      cache.access_tokens ||= {}
+      cache.access_tokens[access_token] = { username: 'DerekYu177' }
 
-    post(
-      '/oauth/introspect',
-      token: access_token
-    )
+      post(
+        '/oauth/introspect',
+        token: access_token
+      )
 
-    response = JSON.parse(last_response.body)
+      response = JSON.parse(last_response.body)
 
-    assert_includes response, 'active'
-    assert response['active']
+      assert_includes response, 'active'
+      assert response['active']
 
-    assert_equal 'DerekYu177', response['username']
+      assert_equal 'DerekYu177', response['username']
+    end
   end
 
   def test_introspection_returns_false
-    post(
-      '/oauth/introspect',
-      token: 'invalid'
-    )
+    Rails.application.config.with(access_token_validation_type: 'reference') do
+      post(
+        '/oauth/introspect',
+        token: 'invalid'
+      )
 
-    response = JSON.parse(last_response.body)
+      response = JSON.parse(last_response.body)
 
-    assert_includes response, 'active'
-    refute response['active']
+      assert_includes response, 'active'
+      refute response['active']
+    end
   end
 
   def default_host

@@ -215,6 +215,7 @@ module ResourceServer
       access_token = tokens['access_token']
 
       cache.current_access_token = access_token
+
       introspect = OAuth::AccessToken.introspect(access_token)
       cache.current_user = introspect['username']
 
@@ -222,6 +223,15 @@ module ResourceServer
     end
 
     private
+
+    def introspect_access_token(access_token)
+      case Rails.application.config.access_token_validation_type
+      when 'reference'
+        ::OAuth::AccessToken.introspect(access_token)
+      when 'self-encoded'
+        ::OAuth::JWT.introspect(access_token)
+      end
+    end
 
     def cache
       @cache ||= State::ResourceServer.instance
@@ -311,13 +321,12 @@ module AuthorizationServer
         when 'authorization_code'
           if valid_grant? && valid_client? && valid_code_verifier?
 
-            access_token = "access-token:#{SecureRandom.hex(10)}"
-            cache.access_tokens ||= {}
-            cache.access_tokens[access_token] = nil
-
             render(
               json: {
-                access_token:,
+                access_token: access_token(
+                  username: 'DerekYu177',
+                  client_id: token_params[:client_id]
+                ),
                 token_type: 'access-token',
                 expires_in: 1.hour.to_i,
                 refresh_token: nil
@@ -333,6 +342,15 @@ module AuthorizationServer
       end
 
       private
+
+      def access_token(...)
+        case Rails.application.config.access_token_validation_type
+        when 'reference'
+          ::OAuth::AccessToken.build(...)
+        when 'self-encoded'
+          ::OAuth::JWT.build(...)
+        end
+      end
 
       def valid_grant?
         # there's no super easy way to validate other than by introspecting it
@@ -374,11 +392,5 @@ module AuthorizationServer
   end
 end
 
-case Rails.application.config.access_token_validation_type
-when 'reference'
-  require 'oauth/token_introspection'
-when 'self-encoded'
-  require 'oauth/jwt'
-else
-  raise "unrecognized access token validation type: #{Rails.application.config.access_token_validation_type}"
-end
+require 'oauth/token_introspection'
+require 'oauth/jwt'

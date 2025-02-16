@@ -94,6 +94,8 @@ GEM
       pp (>= 0.6.0)
       rdoc (>= 4.0.0)
       reline (>= 0.4.2)
+    jwt (2.10.1)
+      base64
     logger (1.6.5)
     loofah (2.24.0)
       crass (~> 1.0.2)
@@ -209,6 +211,7 @@ PLATFORMS
 
 DEPENDENCIES
   debug
+  jwt
   puma
   rails (~> 8.0.0)
 
