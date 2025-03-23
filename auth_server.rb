@@ -115,7 +115,7 @@ module ResourceServer
 
       cache.current_access_token = access_token
 
-      introspect = OAuth::AccessToken.introspect(access_token)
+      introspect = introspect_access_token(access_token)
       cache.current_user = introspect['username']
 
       redirect_to(admin_path)

@@ -9,34 +9,73 @@ require 'debug'
 class AuthServerTest < ActiveSupport::TestCase
   include Rack::Test::Methods
 
-  def test_full_unauthorized_flow
-    get('/admin')
+  setup do
+    Utilities::Storage::ResourceServer.instance.clear!
+    Utilities::Storage::AuthorizationServer.instance.clear!
+  end
 
-    database = Utilities::Storage::ResourceServer.instance
-    refute database.current_user
+  def test_full_unauthorized_flow_reference_tokens
+    Rails.application.config.with(access_token_validation_type: 'reference') do
+      get('/admin')
 
-    assert_equal '/oauth/authorize', URI(last_response['location']).path
-    assert_predicate last_response, :redirect?
+      database = Utilities::Storage::ResourceServer.instance
+      refute database.current_user
 
-    follow_redirect!
+      assert_equal '/oauth/authorize', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
 
-    assert_equal '/admin/callback', URI(last_response['location']).path
-    assert_predicate last_response, :redirect?
+      follow_redirect!
 
-    follow_redirect!
+      assert_equal '/admin/callback', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
 
-    assert_equal '/admin', URI(last_response['location']).path
-    assert_predicate last_response, :redirect?
+      follow_redirect!
 
-    follow_redirect!
+      assert_equal '/admin', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
 
-    response = JSON.parse(last_response.body)
-    assert_equal 'authenticated', response['result']
+      follow_redirect!
 
-    assert_predicate database.current_access_token, :present?
-    assert_predicate database.current_user, :present?
+      response = JSON.parse(last_response.body)
+      assert_equal 'authenticated', response['result']
 
-    assert_equal 'DerekYu177', database.current_user
+      assert_predicate database.current_access_token, :present?
+      assert_predicate database.current_user, :present?
+
+      assert_equal 'DerekYu177', database.current_user
+    end
+  end
+
+  def test_full_unauthorized_flow_self_encoded_tokens
+    Rails.application.config.with(access_token_validation_type: 'self-encoded') do
+      get('/admin')
+
+      database = Utilities::Storage::ResourceServer.instance
+      refute database.current_user
+
+      assert_equal '/oauth/authorize', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
+
+      follow_redirect!
+
+      assert_equal '/admin/callback', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
+
+      follow_redirect!
+
+      assert_equal '/admin', URI(last_response['location']).path
+      assert_predicate last_response, :redirect?
+
+      follow_redirect!
+
+      response = JSON.parse(last_response.body)
+      assert_equal 'authenticated', response['result']
+
+      assert_predicate database.current_access_token, :present?
+      assert_predicate database.current_user, :present?
+
+      assert_equal 'DerekYu177', database.current_user
+    end
   end
 
   def test_authorize_returns_success

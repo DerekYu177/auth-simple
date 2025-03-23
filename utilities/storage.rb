@@ -4,6 +4,10 @@ module Utilities
     module Storable
       include ActiveSupport::Concern
 
+      def clear!
+        @storage = {}        
+      end
+
       def method_missing(method, *args, **kwargs)
         attribute = method.to_s.delete_suffix('=').to_sym
 
@@ -19,6 +23,8 @@ module Utilities
       def respond_to_missing?(method)
         storable_attributes.include?(method)
       end
+
+      def storable_attributes = []
     end
 
     class ResourceServer
