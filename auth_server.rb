@@ -39,27 +39,6 @@ PseudoState = Struct.new do
   def to_s = state
 end
 
-class API
-  class << self
-    def post(path, body:)
-      # looks like API requests are _not_ easily supported
-      # as it conflicts with internal Shopify tool
-
-      requestenv = {
-        'REQUEST_METHOD' => 'POST',
-        'PATH_INFO' => path,
-        'CONTENT_TYPE' => 'application/x-www-form-urlencoded',
-        'HTTP_HOST' => 'localhost',
-        'action_dispatch.request.request_parameters' => body
-      }
-
-      _, _, response = Rails.application.call(requestenv)
-
-      response
-    end
-  end
-end
-
 module ResourceServer
   # OAuth 2.1 Section 1.2 Protocol Flow (1)
   # The client requests authorization from the resource owner.
@@ -121,7 +100,7 @@ module ResourceServer
       # OAuth 2.1 Section 1.2 Protocol Flow (3)
       # The client requests an access token by authenticating
       # with the authorization server and presenting the authorization grant.
-      response = API.post(
+      response = Utilities::API.post(
         '/oauth/tokens',
         body: {
           'grant_type' => 'authorization_code',
@@ -319,3 +298,5 @@ require_relative 'oauth/token_introspection'
 require_relative 'oauth/jwt'
 
 require_relative 'utilities/storage'
+require_relative 'utilities/api'
+

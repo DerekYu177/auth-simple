@@ -17,7 +17,7 @@ module OAuth
 
       def introspect(access_token)
         # make a call to the introspection endpoint
-        response = API.post(
+        response = Utilities::API.post(
           '/oauth/introspect',
           body: { token: access_token }
         )
