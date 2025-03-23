@@ -60,80 +60,6 @@ class API
   end
 end
 
-# a stand-in for db state
-module State
-  module Storable
-    include ActiveSupport::Concern
-
-    def method_missing(method, *args, **kwargs)
-      attribute = method.to_s.delete_suffix('=').to_sym
-
-      return super unless respond_to_missing?(attribute)
-
-      if method.to_s.ends_with?('=')
-        @storage.send(:[]=, attribute, *args, **kwargs)
-      else
-        @storage.send(:[], attribute, *args, **kwargs)
-      end
-    end
-
-    def respond_to_missing?(method)
-      storable_attributes.include?(method)
-    end
-  end
-
-  class ResourceServer
-    include Singleton
-    include Storable
-
-    ID = '1'
-
-    def client_id = ID
-
-    def initialize
-      @storage = {}
-    end
-
-    def storable_attributes
-      %i[
-        current_access_token
-        current_user
-        code_verifier
-      ]
-    end
-  end
-
-  # data shared between resource server & authorization server
-  class ClientRegistration
-    include Singleton
-
-    def id = ResourceServer::ID
-    def callback_url(...) = url_helpers.admin_callback_path(...)
-
-    private
-
-    def url_helpers
-      Rails.application.routes.url_helpers
-    end
-  end
-
-  class AuthorizationServer
-    include Singleton
-    include Storable
-
-    def initialize
-      @storage = {}
-    end
-
-    def storable_attributes
-      %i[
-        authorization_code_grants
-        access_tokens
-      ]
-    end
-  end
-end
-
 module ResourceServer
   # OAuth 2.1 Section 1.2 Protocol Flow (1)
   # The client requests authorization from the resource owner.
@@ -176,7 +102,7 @@ module ResourceServer
     end
 
     def cache
-      @cache ||= State::ResourceServer.instance
+      @cache ||= Utilities::Storage::ResourceServer.instance
     end
   end
 
@@ -228,7 +154,7 @@ module ResourceServer
     end
 
     def cache
-      @cache ||= State::ResourceServer.instance
+      @cache ||= Utilities::Storage::ResourceServer.instance
     end
 
     def callback_params
@@ -260,7 +186,6 @@ module AuthorizationServer
           code_challenge_method: authorization_params[:code_challenge_method]
         }
 
-        client_registration = State::ClientRegistration.instance
         case authorization_params[:client_id]
         when client_registration.id
           redirect_to client_registration.callback_url(code:, state: authorization_params[:state])
@@ -272,7 +197,11 @@ module AuthorizationServer
       private
 
       def cache
-        @cache ||= State::AuthorizationServer.instance
+        @cache ||= Utilities::Storage::AuthorizationServer.instance
+      end
+
+      def client_registration
+        @client_registration ||= Utilities::Storage::ClientRegistration.instance
       end
 
       def validate_request!
@@ -352,7 +281,7 @@ module AuthorizationServer
       end
 
       def valid_client?
-        token_params[:client_id] == State::ClientRegistration.instance.id
+        token_params[:client_id] == Utilities::Storage::ClientRegistration.instance.id
       end
 
       def valid_code_verifier?
@@ -365,7 +294,7 @@ module AuthorizationServer
       end
 
       def cache
-        @cache ||= State::AuthorizationServer.instance
+        @cache ||= Utilities::Storage::AuthorizationServer.instance
       end
 
       def token_params
@@ -386,5 +315,7 @@ module AuthorizationServer
   end
 end
 
-require 'oauth/token_introspection'
-require 'oauth/jwt'
+require_relative 'oauth/token_introspection'
+require_relative 'oauth/jwt'
+
+require_relative 'utilities/storage'

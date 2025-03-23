@@ -8,7 +8,7 @@ module OAuth
       def build(user_attributes)
         access_token = "access-token:#{SecureRandom.hex(10)}"
 
-        cache = State::AuthorizationServer.instance
+        cache = Utilities::Storage::AuthorizationServer.instance
         cache.access_tokens ||= {}
         cache.access_tokens[access_token] = user_attributes
 
@@ -53,7 +53,7 @@ module AuthorizationServer
       end
 
       def cache
-        @cache ||= State::AuthorizationServer.instance
+        @cache ||= Utilities::Storage::AuthorizationServer.instance
       end
 
       def introspection_params

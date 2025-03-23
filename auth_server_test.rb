@@ -12,7 +12,7 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_full_unauthorized_flow
     get('/admin')
 
-    database = State::ResourceServer.instance
+    database = Utilities::Storage::ResourceServer.instance
     refute database.current_user
 
     assert_equal '/oauth/authorize', URI(last_response['location']).path
@@ -42,7 +42,7 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_authorize_returns_success
     get(
       '/oauth/authorize',
-      client_id: State::ResourceServer::ID,
+      client_id: Utilities::Storage::ResourceServer::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 1,
@@ -60,7 +60,7 @@ class AuthServerTest < ActiveSupport::TestCase
   def test_authorize_error_redirects
     get(
       '/oauth/authorize',
-      client_id: State::ResourceServer::ID,
+      client_id: Utilities::Storage::ResourceServer::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 2,
@@ -78,7 +78,7 @@ class AuthServerTest < ActiveSupport::TestCase
     code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
     grant = 'authorization-code-grant'
 
-    cache = State::AuthorizationServer.instance
+    cache = Utilities::Storage::AuthorizationServer.instance
     cache.authorization_code_grants = {}
     cache.authorization_code_grants[grant] = {
       code_challenge_method: 'S256',
@@ -90,7 +90,7 @@ class AuthServerTest < ActiveSupport::TestCase
       grant_type: 'authorization_code',
       code_verifier: code_verifier,
       code: grant,
-      client_id: State::ResourceServer::ID
+      client_id: Utilities::Storage::ResourceServer::ID
     )
 
     response = JSON.parse(last_response.body)
@@ -104,7 +104,7 @@ class AuthServerTest < ActiveSupport::TestCase
       code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
       grant = 'authorization-code-grant'
 
-      cache = State::AuthorizationServer.instance
+      cache = Utilities::Storage::AuthorizationServer.instance
       cache.authorization_code_grants = {}
       cache.authorization_code_grants[grant] = {
         code_challenge_method: 'S256',
@@ -116,7 +116,7 @@ class AuthServerTest < ActiveSupport::TestCase
         grant_type: 'authorization_code',
         code_verifier: code_verifier,
         code: grant,
-        client_id: State::ResourceServer::ID
+        client_id: Utilities::Storage::ResourceServer::ID
       )
 
       response = JSON.parse(last_response.body)
@@ -130,7 +130,7 @@ class AuthServerTest < ActiveSupport::TestCase
       code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
       grant = 'authorization-code-grant'
 
-      cache = State::AuthorizationServer.instance
+      cache = Utilities::Storage::AuthorizationServer.instance
       cache.authorization_code_grants = {}
       cache.authorization_code_grants[grant] = {
         code_challenge_method: 'S256',
@@ -142,7 +142,7 @@ class AuthServerTest < ActiveSupport::TestCase
         grant_type: 'authorization_code',
         code_verifier: code_verifier,
         code: grant,
-        client_id: State::ResourceServer::ID
+        client_id: Utilities::Storage::ResourceServer::ID
       )
 
       response = JSON.parse(last_response.body)
@@ -150,7 +150,7 @@ class AuthServerTest < ActiveSupport::TestCase
       payload = OAuth::JWT.introspect(response['access_token'])
 
       assert_equal 'DerekYu177', payload['username']
-      assert_equal State::ResourceServer::ID, payload['client_id']
+      assert_equal Utilities::Storage::ResourceServer::ID, payload['client_id']
     end
   end
 
@@ -172,7 +172,7 @@ class AuthServerTest < ActiveSupport::TestCase
     Rails.application.config.with(access_token_validation_type: 'reference') do
       access_token = 'access-token'
 
-      cache = State::AuthorizationServer.instance
+      cache = Utilities::Storage::AuthorizationServer.instance
       cache.access_tokens ||= {}
       cache.access_tokens[access_token] = { username: 'DerekYu177' }
 
