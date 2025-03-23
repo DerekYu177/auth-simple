@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-require 'rails/all'
+# uncommenting this line requires adding a database
+# require 'rails/all'
 require 'action_controller/railtie'
 
 class AuthServer < Rails::Application
@@ -28,13 +29,6 @@ Rails.application.routes.draw do
   get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
 end
-
-# we don't have a database, clearly.
-# but these are necessary configuration
-database = 'development.sqlite3'
-ENV['DATABASE_URL'] = "sqlite3:#{database}"
-ActiveRecord::Base.establish_connection(adapter: 'sqlite3', database: database)
-ActiveRecord::Schema.define {}
 
 ActiveSupport::Inflector.inflections(:en) do |inflect|
   inflect.acronym('OAuth')
