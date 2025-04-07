@@ -4,7 +4,7 @@
 # require 'rails/all'
 require 'action_controller/railtie'
 
-class AuthServer < Rails::Application
+class Server < Rails::Application
   config.load_defaults Rails::VERSION::STRING.to_f
   config.root = '__dir__'
   config.secret_key_base = 'secret'
@@ -294,9 +294,9 @@ module AuthorizationServer
   end
 end
 
-require_relative 'oauth/token_introspection'
-require_relative 'oauth/jwt'
+require_relative 'token_introspection'
+require_relative 'jwt'
 
-require_relative 'utilities/storage'
-require_relative 'utilities/api'
+require_relative '../utilities/storage'
+require_relative '../utilities/api'
 

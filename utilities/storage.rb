@@ -1,11 +1,16 @@
 # a stand-in for db state
 module Utilities
   module Storage
-    module Storable
-      include ActiveSupport::Concern
+    class Base
+      include Singleton
 
       def clear!
         @storage = {}        
+      end
+
+      def initialize
+        raise 'storage required!' unless self.class.storable_attributes
+        @storage = {}
       end
 
       def method_missing(method, *args, **kwargs)
@@ -21,31 +26,22 @@ module Utilities
       end
 
       def respond_to_missing?(method)
-        storable_attributes.include?(method)
+        self.class.storable_attributes.include?(method)
       end
-
-      def storable_attributes = []
     end
 
-    class ResourceServer
-      include Singleton
-      include Storable
-
+    class ResourceServer < Base
       ID = '1'
 
-      def client_id = ID
-
-      def initialize
-        @storage = {}
-      end
-
-      def storable_attributes
+      def self.storable_attributes
         %i[
           current_access_token
           current_user
           code_verifier
         ]
       end
+
+      def client_id = ID
     end
 
     # data shared between resource server & authorization server
@@ -62,15 +58,8 @@ module Utilities
       end
     end
 
-    class AuthorizationServer
-      include Singleton
-      include Storable
-
-      def initialize
-        @storage = {}
-      end
-
-      def storable_attributes
+    class AuthorizationServer < Base
+      def self.storable_attributes
         %i[
           authorization_code_grants
           access_tokens

@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
-require_relative './auth_server'
+require_relative './server'
 
 require 'minitest/autorun'
 require 'rack/test'
 require 'debug'
 
-class AuthServerTest < ActiveSupport::TestCase
+class ServerTest < ActiveSupport::TestCase
   include Rack::Test::Methods
 
   setup do
