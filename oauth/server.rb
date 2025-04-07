@@ -4,6 +4,8 @@
 # require 'rails/all'
 require 'action_controller/railtie'
 
+# TODO make all optional / configurations part of a plugins YAML file
+
 class Server < Rails::Application
   config.load_defaults Rails::VERSION::STRING.to_f
   config.root = '__dir__'
@@ -56,7 +58,19 @@ class ClientRegistration
   end
 end
 
+# TODO This file is meant to demonstrate OAuth 2.1. The main differences are as follows:
+#   PKCE is required for all OAuth clients using the authorization code flow
+#   Redirect URIs must be compared using exact string matching
+#   The Implicit grant (response_type=token) is omitted from this specification
+#   The Resource Owner Password Credentials grant is omitted from this specification
+#   Bearer token usage omits the use of bearer tokens in the query string of URIs
+#   Refresh tokens for public clients must either be sender-constrained or one-time use
+# For each of the above, a specific comment must be made and the changes explicitly made
+
 module ResourceServer
+  # TODO use the state param
+  # TODO have unauthenticated routes to test
+
   class Storage < Utilities::Storage::Base
     self.storable_attributes = %i(current_access_token current_user code_verifier)
     ID = '1'
@@ -166,6 +180,9 @@ module ResourceServer
 end
 
 module AuthorizationServer
+  # TODO remove params[:authentication] == 1 and replace with a redirected route that "authenticates"
+  # TODO Have static registration and dynamic registration plugins
+
   class Storage < Utilities::Storage::Base
     def self.storable_attributes = %i(authorization_code_grants access_tokens)
   end
@@ -249,7 +266,6 @@ module AuthorizationServer
         case token_params[:grant_type]
         when 'authorization_code'
           if valid_grant? && valid_client? && valid_code_verifier?
-
             render(
               json: {
                 access_token: access_token(
