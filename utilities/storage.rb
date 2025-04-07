@@ -31,19 +31,5 @@ module Utilities
         self.class.storable_attributes.include?(method)
       end
     end
-
-    # data shared between resource server & authorization server
-    class ClientRegistration
-      include Singleton
-
-      def id = '1'
-      def callback_url(...) = url_helpers.admin_callback_path(...)
-
-      private
-
-      def url_helpers
-        Rails.application.routes.url_helpers
-      end
-    end
   end
 end

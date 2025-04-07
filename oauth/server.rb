@@ -42,6 +42,20 @@ PseudoState = Struct.new do
   def to_s = state
 end
 
+# data shared between resource server & authorization server
+class ClientRegistration
+  include Singleton
+
+  def id = '1'
+  def callback_url(...) = url_helpers.admin_callback_path(...)
+
+  private
+
+  def url_helpers
+    Rails.application.routes.url_helpers
+  end
+end
+
 module ResourceServer
   class Storage < Utilities::Storage::Base
     self.storable_attributes = %i(current_access_token current_user code_verifier)
@@ -193,7 +207,7 @@ module AuthorizationServer
       end
 
       def client_registration
-        @client_registration ||= Utilities::Storage::ClientRegistration.instance
+        @client_registration ||= ClientRegistration.instance
       end
 
       def validate_request!
@@ -273,7 +287,7 @@ module AuthorizationServer
       end
 
       def valid_client?
-        token_params[:client_id] == Utilities::Storage::ClientRegistration.instance.id
+        token_params[:client_id] == ClientRegistration.instance.id
       end
 
       def valid_code_verifier?
