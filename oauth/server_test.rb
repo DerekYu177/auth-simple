@@ -11,7 +11,7 @@ class ServerTest < ActiveSupport::TestCase
 
   setup do
     ResourceServer::Storage.instance.clear!
-    Utilities::Storage::AuthorizationServer.instance.clear!
+    AuthorizationServer::Storage.instance.clear!
   end
 
   def test_full_unauthorized_flow_reference_tokens
@@ -117,7 +117,7 @@ class ServerTest < ActiveSupport::TestCase
     code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
     grant = 'authorization-code-grant'
 
-    cache = Utilities::Storage::AuthorizationServer.instance
+    cache = AuthorizationServer::Storage.instance
     cache.authorization_code_grants = {}
     cache.authorization_code_grants[grant] = {
       code_challenge_method: 'S256',
@@ -143,7 +143,7 @@ class ServerTest < ActiveSupport::TestCase
       code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
       grant = 'authorization-code-grant'
 
-      cache = Utilities::Storage::AuthorizationServer.instance
+      cache = AuthorizationServer::Storage.instance
       cache.authorization_code_grants = {}
       cache.authorization_code_grants[grant] = {
         code_challenge_method: 'S256',
@@ -169,7 +169,7 @@ class ServerTest < ActiveSupport::TestCase
       code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
       grant = 'authorization-code-grant'
 
-      cache = Utilities::Storage::AuthorizationServer.instance
+      cache = AuthorizationServer::Storage.instance
       cache.authorization_code_grants = {}
       cache.authorization_code_grants[grant] = {
         code_challenge_method: 'S256',
@@ -211,7 +211,7 @@ class ServerTest < ActiveSupport::TestCase
     Rails.application.config.with(access_token_validation_type: 'reference') do
       access_token = 'access-token'
 
-      cache = Utilities::Storage::AuthorizationServer.instance
+      cache = AuthorizationServer::Storage.instance
       cache.access_tokens ||= {}
       cache.access_tokens[access_token] = { username: 'DerekYu177' }
 

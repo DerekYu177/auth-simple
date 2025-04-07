@@ -36,22 +36,13 @@ module Utilities
     class ClientRegistration
       include Singleton
 
-      def id = ResourceServer::ID
+      def id = '1'
       def callback_url(...) = url_helpers.admin_callback_path(...)
 
       private
 
       def url_helpers
         Rails.application.routes.url_helpers
-      end
-    end
-
-    class AuthorizationServer < Base
-      def self.storable_attributes
-        %i[
-          authorization_code_grants
-          access_tokens
-        ]
       end
     end
   end

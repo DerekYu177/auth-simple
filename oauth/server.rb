@@ -152,6 +152,10 @@ module ResourceServer
 end
 
 module AuthorizationServer
+  class Storage < Utilities::Storage::Base
+    def self.storable_attributes = %i(authorization_code_grants access_tokens)
+  end
+
   module OAuth
     class AuthorizationController < ActionController::Base
       include Rails.application.routes.url_helpers
@@ -185,7 +189,7 @@ module AuthorizationServer
       private
 
       def cache
-        @cache ||= Utilities::Storage::AuthorizationServer.instance
+        @cache ||= AuthorizationServer::Storage.instance
       end
 
       def client_registration
@@ -282,7 +286,7 @@ module AuthorizationServer
       end
 
       def cache
-        @cache ||= Utilities::Storage::AuthorizationServer.instance
+        @cache ||= AuthorizationServer::Storage.instance
       end
 
       def token_params
