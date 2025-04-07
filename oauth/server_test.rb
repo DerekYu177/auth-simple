@@ -10,7 +10,7 @@ class ServerTest < ActiveSupport::TestCase
   include Rack::Test::Methods
 
   setup do
-    Utilities::Storage::ResourceServer.instance.clear!
+    ResourceServer::Storage.instance.clear!
     Utilities::Storage::AuthorizationServer.instance.clear!
   end
 
@@ -18,7 +18,7 @@ class ServerTest < ActiveSupport::TestCase
     Rails.application.config.with(access_token_validation_type: 'reference') do
       get('/admin')
 
-      database = Utilities::Storage::ResourceServer.instance
+      database = ResourceServer::Storage.instance
       refute database.current_user
 
       assert_equal '/oauth/authorize', URI(last_response['location']).path
@@ -50,7 +50,7 @@ class ServerTest < ActiveSupport::TestCase
     Rails.application.config.with(access_token_validation_type: 'self-encoded') do
       get('/admin')
 
-      database = Utilities::Storage::ResourceServer.instance
+      database = ResourceServer::Storage.instance
       refute database.current_user
 
       assert_equal '/oauth/authorize', URI(last_response['location']).path
@@ -81,7 +81,7 @@ class ServerTest < ActiveSupport::TestCase
   def test_authorize_returns_success
     get(
       '/oauth/authorize',
-      client_id: Utilities::Storage::ResourceServer::ID,
+      client_id: ResourceServer::Storage::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 1,
@@ -99,7 +99,7 @@ class ServerTest < ActiveSupport::TestCase
   def test_authorize_error_redirects
     get(
       '/oauth/authorize',
-      client_id: Utilities::Storage::ResourceServer::ID,
+      client_id: ResourceServer::Storage::ID,
       code_challenge: 'random',
       code_challenge_method: 'S256',
       authenticated: 2,
@@ -129,7 +129,7 @@ class ServerTest < ActiveSupport::TestCase
       grant_type: 'authorization_code',
       code_verifier: code_verifier,
       code: grant,
-      client_id: Utilities::Storage::ResourceServer::ID
+      client_id: ResourceServer::Storage::ID
     )
 
     response = JSON.parse(last_response.body)
@@ -155,7 +155,7 @@ class ServerTest < ActiveSupport::TestCase
         grant_type: 'authorization_code',
         code_verifier: code_verifier,
         code: grant,
-        client_id: Utilities::Storage::ResourceServer::ID
+        client_id: ResourceServer::Storage::ID
       )
 
       response = JSON.parse(last_response.body)
@@ -181,7 +181,7 @@ class ServerTest < ActiveSupport::TestCase
         grant_type: 'authorization_code',
         code_verifier: code_verifier,
         code: grant,
-        client_id: Utilities::Storage::ResourceServer::ID
+        client_id: ResourceServer::Storage::ID
       )
 
       response = JSON.parse(last_response.body)
@@ -189,7 +189,7 @@ class ServerTest < ActiveSupport::TestCase
       payload = OAuth::JWT.introspect(response['access_token'])
 
       assert_equal 'DerekYu177', payload['username']
-      assert_equal Utilities::Storage::ResourceServer::ID, payload['client_id']
+      assert_equal ResourceServer::Storage::ID, payload['client_id']
     end
   end
 

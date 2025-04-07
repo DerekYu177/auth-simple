@@ -34,12 +34,21 @@ ActiveSupport::Inflector.inflections(:en) do |inflect|
   inflect.acronym('OAuth')
 end
 
+require_relative '../utilities/storage'
+require_relative '../utilities/api'
+
 PseudoState = Struct.new do
   def state = 'pseudo-state'
   def to_s = state
 end
 
 module ResourceServer
+  class Storage < Utilities::Storage::Base
+    self.storable_attributes = %i(current_access_token current_user code_verifier)
+    ID = '1'
+    def client_id = ID
+  end
+
   # OAuth 2.1 Section 1.2 Protocol Flow (1)
   # The client requests authorization from the resource owner.
   # The authorization request can be made directly to the resource owner,
@@ -81,7 +90,7 @@ module ResourceServer
     end
 
     def cache
-      @cache ||= Utilities::Storage::ResourceServer.instance
+      @cache ||= ResourceServer::Storage.instance
     end
   end
 
@@ -133,7 +142,7 @@ module ResourceServer
     end
 
     def cache
-      @cache ||= Utilities::Storage::ResourceServer.instance
+      @cache ||= ResourceServer::Storage.instance
     end
 
     def callback_params
@@ -296,7 +305,4 @@ end
 
 require_relative 'token_introspection'
 require_relative 'jwt'
-
-require_relative '../utilities/storage'
-require_relative '../utilities/api'
 

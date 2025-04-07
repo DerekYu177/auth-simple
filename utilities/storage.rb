@@ -4,6 +4,8 @@ module Utilities
     class Base
       include Singleton
 
+      class_attribute :storable_attributes
+
       def clear!
         @storage = {}        
       end
@@ -28,20 +30,6 @@ module Utilities
       def respond_to_missing?(method)
         self.class.storable_attributes.include?(method)
       end
-    end
-
-    class ResourceServer < Base
-      ID = '1'
-
-      def self.storable_attributes
-        %i[
-          current_access_token
-          current_user
-          code_verifier
-        ]
-      end
-
-      def client_id = ID
     end
 
     # data shared between resource server & authorization server
