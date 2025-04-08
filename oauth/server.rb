@@ -60,9 +60,7 @@ class ClientRegistration
 end
 
 # TODO This file is meant to demonstrate OAuth 2.1. The main differences are as follows:
-#   PKCE is required for all OAuth clients using the authorization code flow
 #   Redirect URIs must be compared using exact string matching
-#   The Implicit grant (response_type=token) is omitted from this specification
 #   The Resource Owner Password Credentials grant is omitted from this specification
 #   Bearer token usage omits the use of bearer tokens in the query string of URIs
 #   Refresh tokens for public clients must either be sender-constrained or one-time use
@@ -230,6 +228,9 @@ module AuthorizationServer
       end
 
       def validate_request!
+        # OAuth 2.1 Major Difference #2:
+        # The Implicit grant (response_type=token) is omitted from this specification
+        return oauth_error!('response_type=token') if authorization_params[:response_type] == 'token'
         return oauth_error!('response_type') unless authorization_params[:response_type] == 'code'
         return oauth_error!('client_id') unless authorization_params[:client_id]
         return oauth_error!('code_challenge') unless authorization_params[:code_challenge]
