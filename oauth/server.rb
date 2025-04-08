@@ -40,11 +40,6 @@ end
 require_relative '../utilities/storage'
 require_relative '../utilities/api'
 
-PseudoState = Struct.new do
-  def state = 'pseudo-state'
-  def to_s = state
-end
-
 # data shared between resource server & authorization server
 class ClientRegistration
   include Singleton
@@ -67,7 +62,6 @@ end
 # For each of the above, a specific comment must be made and the changes explicitly made
 
 module ResourceServer
-  # TODO use the state param
   # TODO have unauthenticated routes to test
 
   class Storage < Utilities::Storage::Base
@@ -109,7 +103,7 @@ module ResourceServer
         authenticated: 1,
         response_type: 'code',
         redirect_to: '', # ?
-        state: PseudoState.new.to_s
+        state: Base64.urlsafe_encode64(JSON.generate({ page: admin_path }))
       )
     end
 
@@ -155,7 +149,9 @@ module ResourceServer
       introspect = introspect_access_token(access_token)
       cache.current_user = introspect['username']
 
-      redirect_to(admin_path)
+      state = JSON.parse(Base64.urlsafe_decode64(params[:state]))
+
+      redirect_to(state['page'])
     end
 
     private
