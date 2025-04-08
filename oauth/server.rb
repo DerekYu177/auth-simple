@@ -34,6 +34,7 @@ end
 
 ActiveSupport::Inflector.inflections(:en) do |inflect|
   inflect.acronym('OAuth')
+  inflect.acronym('PKCE')
 end
 
 require_relative '../utilities/storage'
@@ -95,17 +96,18 @@ module ResourceServer
     def require_authentication
       return if current_user.present?
 
-      cache.code_verifier = "code-verifier:#{SecureRandom.hex(10)}"
-      code_challenge = Base64.urlsafe_encode64(
-        Digest::SHA2.hexdigest(
-          cache.code_verifier
-        )
-      )
+      # OAuth 2.1 Major Difference #1:
+      # PKCE is required for all OAuth clients using the authorization code flow
+      code_verifier = ::OAuth::PKCE.generate_code_verifier
+      code_challenge = ::OAuth::PKCE.generate_code_challenge(code_verifier)
+      code_challenge_method = ::OAuth::PKCE::SUPPORTED_CODE_CHALLENGE_VERSION
+
+      cache.code_verifier = code_verifier
 
       redirect_to oauth_authorize_path(
         client_id: cache.client_id,
         code_challenge:,
-        code_challenge_method: 'S256',
+        code_challenge_method:,
         authenticated: 1,
         response_type: 'code',
         redirect_to: '', # ?
@@ -231,7 +233,7 @@ module AuthorizationServer
         return oauth_error!('response_type') unless authorization_params[:response_type] == 'code'
         return oauth_error!('client_id') unless authorization_params[:client_id]
         return oauth_error!('code_challenge') unless authorization_params[:code_challenge]
-        return oauth_error!('code_challenge_method') unless authorization_params[:code_challenge_method] == 'S256'
+        return oauth_error!('code_challenge_method') unless ::OAuth::PKCE.supported?(authorization_params[:code_challenge_method])
         return oauth_error!('invalid authentication') unless params[:authenticated] == '1'
 
         nil
@@ -309,10 +311,13 @@ module AuthorizationServer
       def valid_code_verifier?
         challenge = cache.authorization_code_grants[token_params[:code]]
 
-        return false unless challenge[:code_challenge_method] == 'S256'
+        return false unless ::OAuth::PKCE.supported?(challenge[:code_challenge_method])
         return false unless token_params[:code_verifier]
 
-        challenge[:code_challenge] == Base64.urlsafe_encode64(Digest::SHA2.hexdigest(token_params[:code_verifier]))
+        ::OAuth::PKCE.valid_code_challenge?(
+          stored_challenge: challenge[:code_challenge],
+          provided_verifier: token_params[:code_verifier],
+        )
       end
 
       def cache
@@ -339,4 +344,4 @@ end
 
 require_relative 'token_introspection'
 require_relative 'jwt'
-
+require_relative 'pkce'
