@@ -2,6 +2,8 @@
 
 module Utilities
   class API
+    Response = Struct.new(:status, :body, :headers, keyword_init: true)
+
     class << self
       def post(path, body:)
         # looks like API requests are _not_ easily supported
@@ -15,9 +17,9 @@ module Utilities
           'action_dispatch.request.request_parameters' => body
         }
 
-        _, _, response = Rails.application.call(requestenv)
+        status, headers, response = Rails.application.call(requestenv)
 
-        response
+        Response.new(status:, headers:, body: response.first) 
       end
     end
   end
