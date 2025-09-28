@@ -15,8 +15,38 @@ class Server < Rails::Application
   config.logger = Logger.new($stdout)
 
   # application configurations
-  config.access_token_validation_type = 'reference' # can be either 'reference' or 'self-encoded'
+  initializer 'application.supported_oauth_configurations' do
+    config.supported_access_token_validation_types = %w(reference self-encoded)
+    config.supported_registration_types = %w(static dynamic)
+  end
+
+  initializer 'application.check_oauth_configurations' do
+    def unrecognized_option!(name, supported:, actual:)
+      message = <<~MESSAGE.squish
+        Unexpected option Rails.application.config.#{name}: #{actual}.
+        Supported values: #{supported}
+      MESSAGE
+
+      raise(message)
+    end
+
+    def validate!(name)
+      supported = Rails.application.config.public_send("supported_#{name}s")
+      configured_value = Rails.application.config.public_send(name)
+
+      supported.include?(configured_value) ||
+        unrecognized_option!(name, supported:, actual: configured_value)
+    end
+
+    validate!('access_token_validation_type')
+    validate!('registration_type')
+  end
 end
+
+# can be either 'reference' or 'self-encoded'
+Rails.application.config.access_token_validation_type = 'reference'
+# can be either 'static' or 'dynamic'
+Rails.application.config.registration_type = 'static'
 
 Rails.application.initialize!
 Rails.application.routes.default_url_options = { host: 'localhost' }
@@ -24,9 +54,8 @@ Rails.application.routes.draw do
   get 'oauth/authorize' => 'authorization_server/oauth/authorization#new'
   post 'oauth/tokens' => 'authorization_server/oauth/tokens#create'
 
-  if Rails.application.config.access_token_validation_type == 'reference'
-    post 'oauth/introspect' => 'authorization_server/oauth/introspection#create'
-  end
+  # used if Rails.application.config.access_token_validation_type == 'reference'
+  post 'oauth/introspect' => 'authorization_server/oauth/introspection#create'
 
   get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
@@ -44,10 +73,33 @@ require_relative '../utilities/api'
 class ClientRegistration
   include Singleton
 
-  def id = '1'
-  def callback_url(...) = url_helpers.admin_callback_path(...)
+  def id
+    Rails.application.validate!('access_token_validation_type')
+
+    case Rails.application.config.registration_type
+    when 'static'
+      '1'
+    when 'dynamic'
+      @id || unregistered!
+    end
+  end
+
+  def callback_url(...)
+    Rails.application.validate!('access_token_validation_type')
+
+    case Rails.application.config.registration_type
+    when 'static'
+      url_helpers.admin_callback_path(...)
+    when 'dynamic'
+      @callback_url || unregistered!
+    end
+  end
 
   private
+
+  def unregistered!
+    raise('Application has not been registered!')
+  end
 
   def url_helpers
     Rails.application.routes.url_helpers

@@ -4,9 +4,21 @@ require 'debug'
 require_relative '../oauth/server'
 
 RSpec.configure do |config|
+  def validation_application_config_via_initializer!
+    Rails.application.initializers.select { |i| i.name.to_s.include?('application') }.each(&:run)
+  end
+
   config.around do |example|
-    if (app_options = example.metadata.slice(:access_token_validation_type))
-      Rails.application.config.with(**app_options) { example.call }
+    oauth_configuration_options = %i(access_token_validation_type registration_type)
+
+    if (app_options = example.metadata.slice(*oauth_configuration_options)).present?
+      Rails.application.config.with(**app_options) do
+        # rerun validations just in case
+        validation_application_config_via_initializer!
+        example.call
+      end
+    else
+      example.call
     end
   end
 end
