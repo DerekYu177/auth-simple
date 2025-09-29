@@ -69,9 +69,23 @@ end
 require_relative '../utilities/storage'
 require_relative '../utilities/api'
 
+require_relative 'dynamic_registration'
+
 # data shared between resource server & authorization server
 class ClientRegistration
   include Singleton
+
+  class NotFoundError < StandardError; end
+
+  def initialize
+    @id = nil
+    @callback_url = nil
+  end
+
+  def clear!
+    @id = nil
+    @callback_url = nil
+  end
 
   def id
     Rails.application.validate!('access_token_validation_type')
@@ -98,7 +112,8 @@ class ClientRegistration
   private
 
   def unregistered!
-    raise('Application has not been registered!')
+    Rails.logger.error('Client has not been dynamically registered!')
+    raise(NotFoundError)
   end
 
   def url_helpers
@@ -127,6 +142,13 @@ module ResourceServer
   # The authorization request can be made directly to the resource owner,
   # or preferably indirectly via the authorization server as an intermediary.
   class AuthenticatedController < ActionController::Base
+    include ::OAuth::DynamicRegistration
+
+    before_action(
+      :dynamically_register,
+      only: :new,
+      if: :dynamic_registration?,
+    )
     before_action :require_authentication, only: :new
 
     def new
@@ -263,6 +285,8 @@ module AuthorizationServer
         else
           oauth_error!('unrecognized client')
         end
+      rescue ::ClientRegistration::NotFoundError
+        oauth_error!('unrecognized client')
       end
 
       private
@@ -272,7 +296,7 @@ module AuthorizationServer
       end
 
       def client_registration
-        @client_registration ||= ClientRegistration.instance
+        ClientRegistration.instance
       end
 
       def validate_request!
