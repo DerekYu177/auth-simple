@@ -69,7 +69,7 @@ end
 require_relative '../utilities/storage'
 require_relative '../utilities/api'
 
-require_relative 'dynamic_registration'
+require_relative '../oauth/dynamic_registration'
 
 # data shared between resource server & authorization server
 class ClientRegistration
@@ -253,6 +253,8 @@ module AuthorizationServer
   # TODO remove params[:authentication] == 1 and replace with a redirected route that "authenticates"
   # TODO Have static registration and dynamic registration plugins
 
+  ISSUER = 'https://auth-ser.derekyu.com'
+
   class Storage < Utilities::Storage::Base
     def self.storable_attributes = %i(authorization_code_grants access_tokens)
   end
@@ -345,7 +347,17 @@ module AuthorizationServer
               json: {
                 access_token: access_token(
                   username: 'DerekYu177',
-                  client_id: token_params[:client_id]
+                  client_id: token_params[:client_id],
+
+                  # In OAuth RFC 7523 Draft
+                  # Updates to Audience Values for 2.0 Authorization Servers:
+                  # The assertion MUST contain an audience value that identifies
+                  # the authorization server as the intended audience.
+                  # It is the responsibility of the client to use only audience values
+                  # that are specific to the authorization server being used.
+                  # The authorization server MUST reject any assertion that does not
+                  # contain its own identity as the intended audience.
+                  aud: ISSUER,
                 ),
                 token_type: 'access-token',
                 expires_in: 1.hour.to_i,
@@ -415,6 +427,6 @@ module AuthorizationServer
   end
 end
 
-require_relative 'token_introspection'
-require_relative 'jwt'
-require_relative 'pkce'
+require_relative '../oauth/token_introspection'
+require_relative '../oauth/jwt'
+require_relative '../oauth/pkce'

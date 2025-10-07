@@ -2,4 +2,4 @@
 
 require_relative 'server'
 
-run Server
+# run Server

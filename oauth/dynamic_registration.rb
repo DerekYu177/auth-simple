@@ -6,7 +6,7 @@ module OAuth
 
     included do
       def dynamically_register
-        # TODO
+        # TODO 
       end
 
       def dynamic_registration?

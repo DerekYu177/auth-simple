@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 require 'debug'
-require_relative '../oauth/server'
+require_relative '../app/server'
 
 RSpec.configure do |config|
   include Rack::Test::Methods
