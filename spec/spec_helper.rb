@@ -11,6 +11,7 @@ RSpec.configure do |config|
   config.before do
     ResourceServer::Storage.instance.clear!
     AuthorizationServer::Storage.instance.clear!
+    ClientRegistration.instance.send(:reset!)
 
     def default_host = 'localhost'
   end

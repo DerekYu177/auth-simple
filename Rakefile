@@ -13,28 +13,17 @@ task :routes, [:dir] do |task, args|
   args = opts.order!(ARGV) {}
   opts.parse!(args)
 
-  case options[:dir]
-  when 'oauth'
-    # run with rake routes -- -d 'oauth'
-    require_relative './oauth/server'
-  else
-    raise 'unrecognized server'
-  end
+  # case options[:dir]
+  # when 'oauth'
+  #   # run with rake routes -- -d 'oauth'
+  #   require_relative './app/server'
+  # else
+  #   raise 'unrecognized server'
+  # end
+  require_relative 'app/server'
 
   inspector = ActionDispatch::Routing::RoutesInspector.new(Rails.application.routes.routes)
   formatter = ActionDispatch::Routing::ConsoleFormatter::Sheet.new
 
   puts inspector.format(formatter, {})
 end
-
-# minitest is deprecated as of September 17th, 2025 
-# it's replacement is rspec
-#
-# require 'minitest/test_task'
-# 
-# # to run a specific test:
-# # N=/regexoftest/ rake test
-# Minitest::TestTask.create(:test) do |t|
-#   t.warning = false
-#   t.test_globs = ['**/*_test.rb']
-# end

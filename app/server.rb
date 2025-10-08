@@ -57,6 +57,9 @@ Rails.application.routes.draw do
   # used if Rails.application.config.access_token_validation_type == 'reference'
   post 'oauth/introspect' => 'authorization_server/oauth/introspection#create'
 
+  # used if Rails.application.config.registration_type == 'dynamic'
+  post 'oauth/register' => 'authorization_server/oauth/dynamic_registration#create'
+
   get 'admin' => 'resource_server/authenticated#new'
   get 'admin/callback' => 'resource_server/callback#new'
 end
@@ -80,6 +83,8 @@ class ClientRegistration
   def initialize
     @id = nil
     @callback_url = nil
+
+    reset!
   end
 
   def clear!
@@ -87,12 +92,22 @@ class ClientRegistration
     @callback_url = nil
   end
 
+  def set!(**attributes)
+    attributes.each do |key, value|
+      if defined?(instance_variable_get("@#{key}".to_sym))
+        instance_variable_set("@#{key}".to_sym, value)
+      else
+        raise "Unrecognized value! #{key}: #{value}"
+      end
+    end
+  end
+
   def id
     Rails.application.validate!('access_token_validation_type')
 
     case Rails.application.config.registration_type
     when 'static'
-      '1'
+      @id
     when 'dynamic'
       @id || unregistered!
     end
@@ -103,13 +118,20 @@ class ClientRegistration
 
     case Rails.application.config.registration_type
     when 'static'
-      url_helpers.admin_callback_path(...)
+      @callback_url.call(...)
     when 'dynamic'
       @callback_url || unregistered!
     end
   end
 
   private
+
+  def reset!
+    if Rails.application.config.registration_type == 'static'
+      @id = "1"
+      @callback_url = ->(params) { url_helpers.admin_callback_path(params) }
+    end
+  end
 
   def unregistered!
     Rails.logger.error('Client has not been dynamically registered!')
@@ -342,6 +364,10 @@ module AuthorizationServer
       def create
         case token_params[:grant_type]
         when 'authorization_code'
+          unless valid_client?
+            return oauth_error!("unrecognized client #{token_params[:client_id]}")
+          end
+
           if valid_grant? && valid_client? && valid_code_verifier?
             render(
               json: {
@@ -391,6 +417,8 @@ module AuthorizationServer
 
       def valid_client?
         token_params[:client_id] == ClientRegistration.instance.id
+      rescue ClientRegistration::NotFoundError
+        false
       end
 
       def valid_code_verifier?
