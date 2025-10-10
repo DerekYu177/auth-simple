@@ -40,6 +40,9 @@ module AuthorizationServer
           # TODO: support multiple
           callback_url: registration_params[:redirect_uris].first,
         )
+
+        # TODO, return if not valid?
+        head(:ok)
       end
 
       private

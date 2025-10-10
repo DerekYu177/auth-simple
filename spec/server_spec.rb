@@ -36,9 +36,25 @@ RSpec.describe('end to end flows', type: :request) do
 
   context 'with reference tokens', access_token_validation_type: 'reference' do
     it_behaves_like 'succeeds'
+
+    context 'with static registration', registration_type: 'static' do
+      it_behaves_like 'succeeds'
+    end
+
+    context 'with dynamic registration', registration_type: 'dynamic' do
+      it_behaves_like 'succeeds'
+    end
   end
 
-  context 'with reference tokens', access_token_validation_type: 'self-encoded' do
+  context 'with self-encoded tokens', access_token_validation_type: 'self-encoded' do
     it_behaves_like 'succeeds'
+
+    context 'with static registration', registration_type: 'static' do
+      it_behaves_like 'succeeds'
+    end
+
+    context 'with dynamic registration', registration_type: 'dynamic' do
+      it_behaves_like 'succeeds'
+    end
   end
 end

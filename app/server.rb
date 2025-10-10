@@ -113,12 +113,12 @@ class ClientRegistration
     end
   end
 
-  def callback_url(...)
+  def callback_url
     Rails.application.validate!('access_token_validation_type')
 
     case Rails.application.config.registration_type
     when 'static'
-      @callback_url.call(...)
+      @callback_url
     when 'dynamic'
       @callback_url || unregistered!
     end
@@ -129,7 +129,7 @@ class ClientRegistration
   def reset!
     if Rails.application.config.registration_type == 'static'
       @id = "1"
-      @callback_url = ->(params) { url_helpers.admin_callback_path(params) }
+      @callback_url = url_helpers.admin_callback_path
     end
   end
 
@@ -305,7 +305,7 @@ module AuthorizationServer
 
         case authorization_params[:client_id]
         when client_registration.id
-          redirect_to client_registration.callback_url(code:, state: authorization_params[:state])
+          redirect_to callback_url(code:, state: authorization_params[:state])
         else
           oauth_error!('unrecognized client')
         end
@@ -314,6 +314,12 @@ module AuthorizationServer
       end
 
       private
+
+      def callback_url(**params)
+        uri = URI(client_registration.callback_url)
+        uri.query = URI.encode_www_form(**params)
+        uri.to_s
+      end
 
       def cache
         @cache ||= AuthorizationServer::Storage.instance
